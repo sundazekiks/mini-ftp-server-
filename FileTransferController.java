@@ -68,7 +68,7 @@ public class FileTransferController {
         }   
 
     
-    void InputHandler(String CMD, String ARGS, Socket ctrl) throws IOException {
+    public void InputHandler(String CMD, String ARGS, Socket ctrl) throws IOException {
         switch(CMD) {
             case "LIST" -> { 
                 Socket d = openData();
