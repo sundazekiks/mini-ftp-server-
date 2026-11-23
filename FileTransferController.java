@@ -1,6 +1,7 @@
 
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
@@ -66,7 +67,31 @@ public class FileTransferController {
                 return ss.accept();
             }
         }   
+    
+    private void download(String args) throws IOException {
+            if (args == null || args.isBlank()) {
+                reply("501 Usage: DWNLD <file>");
+                return;
+            }
 
+            // Validate BEFORE openData(): it sends the 150 and blocks on accept()
+            Path file = resolve(args.trim());
+            if (file == null || !Files.isRegularFile(file) || !Files.isReadable(file)) {
+                reply("550 File not found or not readable");
+                return;
+            }
+
+            Socket d = openData();                  // sends 150, or 425 if no PASV
+            if (d == null) return;
+
+            try (d; InputStream src = Files.newInputStream(file)) {
+                src.transferTo(d.getOutputStream());
+            } catch (IOException e) {
+                reply("426 Transfer aborted: " + e.getMessage());
+                return;
+            }
+            reply("226 Transfer complete");
+        }
     
     public void InputHandler(String CMD, String ARGS, Socket ctrl) throws IOException {
         switch(CMD) {
@@ -101,19 +126,23 @@ public class FileTransferController {
                 reply("227 Entering Passive Mode (" + ip + "," + (port >> 8) + "," + (port & 255) + ")");
                 
             }
-        case "STOR" -> {
-            Path p = resolve(ARGS);
-            if (p == null) {reply("ERROR: Not allowed");}
-            Socket d = openData();
-            try (
-                d; 
-                OutputStream fo = Files.newOutputStream(p);
-            ) {
-                System.out.println("it works");
-                d.getInputStream().transferTo(fo);
-            } 
-            reply("226 Transfer complete");
-        }
+            case "STOR" -> {
+                        if (ARGS == null || ARGS.isBlank()) { reply("501 Usage: STOR <file>"); break; }
+                        Path p = resolve(ARGS.trim());
+                        if (p == null || Files.isDirectory(p)) { reply("550 Not allowed"); break; }
+
+                        Socket d = openData();
+                        if (d == null) break;
+
+                        try (d; OutputStream fo = Files.newOutputStream(p)) {
+                            d.getInputStream().transferTo(fo);
+                        } catch (IOException e) {
+                            reply("426 Transfer aborted: " + e.getMessage());
+                            break;
+                        }
+                        reply("226 Transfer complete");
+                    }
+            case "DWNLD" -> download(ARGS);
             default -> { 
                 out.write("ERROR: Please enter a valid command");
                 out.newLine();
